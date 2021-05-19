@@ -1,0 +1,77 @@
+import os
+import main_functions
+
+# 基本文件
+ ## gxf_file: RGAP上的gff3文件
+ ## seq_file: RGAP上的各基因基因组序列文件
+ ## SNP_posi_file: 整理得到的SNP位置信息
+wkdir = r"C:\Users\hr\Desktop\TF_Haplotypes"
+gxf_file = r"C:\Users\hr\Desktop\TF_Haplotypes\Genome\all.gff3"
+seq_file = r"C:\Users\hr\Desktop\TF_Haplotypes\Genome\all.seq"
+SNP_posi_file = r"C:\Users\hr\Desktop\TF_Haplotypes\SNP\转录因子SNP.csv"
+SNP_seq_file = r"C:\Users\hr\Desktop\TF_Haplotypes\SNP\单倍型.csv"
+
+# 建立文件夹
+ ## files_extracted: 存放从原始文件中提取出的信息
+  ### gff_ext: 从gff文件中提取的信息
+  ### SNP_file_ext: 从整理的SNP文档中提取的信息
+  ### ext_ext: 基于上述文件加工得到的文件
+ ## Haps: 存放最终的单倍型序列文件
+os.chdir(wkdir)
+main_functions.mkdir_new("files_extracted")
+
+main_functions.mkdir_new("files_extracted\\gff_ext")
+gff_ext = wkdir + "\\files_extracted\\gff_ext"
+
+main_functions.mkdir_new("files_extracted\\SNP_file_ext")
+SNP_file_ext = wkdir + "\\files_extracted\\SNP_file_ext"
+
+main_functions.mkdir_new("files_extracted\\ext_ext")
+ext_ext = wkdir + "\\files_extracted\\ext_ext"
+
+main_functions.mkdir_new("Haps")
+hapdir = wkdir + "\\Haps"
+
+
+# 提取gff文件中的信息
+os.chdir(gff_ext)
+ ## 1 基因位置信息("LOC_position.txt"): 基因LOC号 染色体 起始位点 终止位点 正负链信息
+main_functions.gff_gene_posi(gxf_file)
+LOC_posi2chr_f = gff_ext + "\\LOC_position.txt"
+
+ ## 2 基因各转录本CDS位置信息("CDS_position.txt"): 基因LOC号 染色体 起始位点 终止位点 起始位点(相对基因) 终止位点(相对基因)
+main_functions.gff_CDS_posi(gxf_file)
+CDS_posi2chr_f = gff_ext + "\\CDS_position.txt"
+
+# 提取SNP_files中的信息
+os.chdir(SNP_file_ext)
+ ## 1 SNP位置信息("LOC_SNPposi.txt"): 基因LOC号 SNP位点相对染色体位置(","分隔)
+    ##! 试用前请转化为csv文件并仅保留前四列：TF_ID	Var ID	Chrom	Position
+main_functions.SNP_L_Sposi(L_Spfile=SNP_posi_file, output="LOC_SNPposi.txt")
+LOC_SNPposi2chr_f = SNP_file_ext + "\\LOC_SNPposi.txt"
+
+ ## 2 SNP序列信息("LOC_SNPseq.txt"): 基因LOC号 Hap-sequence(","分隔)
+    ##! 试用前请转化为csv文件并仅保留前三列：TF_ID	Haplotype Group Haplotype
+main_functions.SNP_L_Sseq(L_Ssfile=SNP_seq_file, output="LOC_SNPseq.txt")
+LOC_SNPseq_f = SNP_file_ext + "\\LOC_SNPseq.txt"
+
+
+# 合并提取的信息得到进一步的信息
+os.chdir(ext_ext)
+ ## 1 各转录本CDS相对基因位置信息整合文件("CDS_posi2gene.txt"): 转录本ID CDS相对基因位置(sta-end, ";"分隔)
+main_functions.ext_CDS_posi2gene(CDS_posi2chr_file=CDS_posi2chr_f)
+CDS_last_f = ext_ext + "\\CDS_posi2gene.txt"
+
+ ## 2 各LOC的SNP完整信息("SNP_posi2gene_seq.txt")：基因LOC号 SNP2gene位置 单倍型SNP序列
+main_functions.ext_SNPposi2gene_seq(LOC_posi2chr_f=LOC_posi2chr_f,
+                                    LOC_SNPseq_f=LOC_SNPseq_f,
+                                    LOC_SNPposi2chr_f=LOC_SNPposi2chr_f)
+SNP_last_f = ext_ext + "\\SNP_posi2gene_seq.txt"
+
+
+# last_step
+ ## 1 根据基因原始序列得到单倍型的全序列
+# main_functions.last_get_Hapseq(SNP_last_f, seq_file, hapdir)
+
+ ## 2 根据单倍型的全序列和转录本CDS信息得到CDS序列
+main_functions.last_get_HapCDS(SNP_last_f, CDS_last_f, hapdir)
