@@ -1,0 +1,176 @@
+import re
+
+Loc = []
+with open("1.txt") as L:
+    i = 0
+    for loc in L:
+        Loc.append(loc.rstrip())
+
+requ = []
+with open("res.txt") as L:
+    i = 0
+    for req in L:
+        requ.append(req.rstrip())
+
+Loc_pos = dict()
+with open("LOC_position.txt") as po:
+    for loc_pos in po:
+        pos = loc_pos.split()
+        pos_w = [pos[2], pos[3]]
+        Loc_pos[pos[0]] = pos_w
+
+CDS = dict()
+with open("CDS.txt") as cds:
+    for cd in cds:
+        line_lit = cd.split()
+        lo = line_lit[0].split(".")
+        posi = re.split(r"[;-]\s*", line_lit[1])
+        if not lo[0] in CDS.keys():
+            CDS[lo[0]] = dict()  
+        pos_w = [posi[i:i + 2] for i in range(0, len(posi), 2)]  
+        CDS[lo[0]][lo[1]] = pos_w
+
+SNP = dict()
+Res = dict()
+with open("SNP.txt") as sn:
+    for snp in sn:
+        line_lit = snp.split()
+        posi = line_lit[1].split(",")
+        if not line_lit[0] in Res.keys():
+            Res[line_lit[0]] = dict()
+        SNP[line_lit[0]] = posi
+
+Pln = dict()
+Pln_snp=dict()
+with open("Pln.txt") as pl:
+    for p in pl:
+        line_lit = p.split()
+        if not line_lit[0] in Pln.keys():
+            Pln[line_lit[0]] = dict()
+        if not line_lit[1] in Pln[line_lit[0]].keys():
+            Pln[line_lit[0]][line_lit[1]] = []
+        pos = [line_lit[4], line_lit[5]]
+        Pln[line_lit[0]][line_lit[1]].append(pos)
+
+        line_snp=line_lit[0].split(".")
+        if not line_snp[0] in Pln_snp.keys():
+            Pln_snp[line_snp[0]]=dict()
+        if not line_snp[1] in Pln_snp[line_snp[0]].keys():
+            Pln_snp[line_snp[0]][line_snp[1]] = []
+        Pln_snp[line_snp[0]][line_snp[1]].append(pos)
+
+for key_snp in SNP.keys():
+    wide = []
+    loc_po = Loc_pos[key_snp]
+    for nu in CDS[key_snp].keys():
+        Res[key_snp][nu] = 0
+        wide = CDS[key_snp][nu]
+        res = []
+        for posi in SNP[key_snp]:
+            pos = int(posi) - int(loc_po[0]) + 1
+            r_posi = 0
+            for wi in wide:
+                if pos >= int(wi[0]) and pos <= int(wi[1]):
+                    r_posi += pos - int(wi[0]) + 1
+                else:
+                    r_posi += int(wi[1]) - int(wi[0]) + 1
+            res.append(r_posi)
+        Res[key_snp][nu] = res
+
+flag = dict()
+loc_content = dict()
+for key_re in Res.keys():
+    for n in Res[key_re].keys():
+        loc_com = key_re + "." + n
+        flag[loc_com] = 0
+        if loc_com in Pln:
+            for na in Pln[loc_com].keys():
+                if not na in loc_content.keys():
+                    loc_content[na] = dict()
+                for wid in Pln[loc_com][na]:
+                    i = 0
+                    for re in Res[key_re][n]:
+                        if re >= int(wid[0]) and re <= int(wid[1]):
+                            if not key_re in loc_content[na].keys():
+                                loc_content[na][key_re] = []
+                                loc_content[na][key_re].append(SNP[key_re][i])
+                            else:
+                                loc_content[na][key_re].append(SNP[key_re][i])
+                        else:
+                            if not key_re in loc_content[na].keys():
+                                loc_content[na][key_re] = []
+                        i += 1
+
+
+excel_list=[]
+
+re_snp=dict()
+ 
+for lo in Res.keys():
+    re_snp[lo]=[]
+    if not lo in Pln_snp.keys():
+        continue
+    for n in Res[lo].keys():
+        if not n in Pln_snp[lo].keys():
+            continue
+        i = 0
+        for re in Res[lo][n]:
+            flag=0
+            for pl in Pln_snp[lo][n]:
+                if re>= int(pl[0]) and re<=int(pl[1]):
+                    # re_snp[lo].append(SNP[lo][i])
+                    flag=1
+            if flag==0:
+                re_snp[lo].append(SNP[lo][i])
+            i+=1
+
+with open("result_snp.txt","w") as s:
+    for ke in re_snp.keys():
+        if len(re_snp[ke])==0:
+            continue
+        s.write(ke+"\n")
+        for te in re_snp[ke]:
+            s.write(str(te)+"\t")
+        s.write("\n"+str(len(re_snp[ke]))+"\n"+"\n"+"\n")
+
+
+with open("result_last.txt", "w") as f:
+    for r in requ:
+        res_num = 0
+
+        if not r in loc_content.keys():
+            continue
+        f.write(r + "\n")
+        for co in loc_content[r].keys():
+            excel_list.append(co)
+            length = len(loc_content[r][co])
+            if length == 0:
+                continue
+            res_num += length
+            f.write(co + '\t' + str(length) + '\t')
+            for x in loc_content[r][co]:
+                f.write(str(x) + '\t')
+            f.write('\n')
+        f.write(str(res_num))
+        f.write("\n")
+        f.write("\n")
+        f.write("\n")
+        del loc_content[r]
+
+    for r in loc_content.keys():
+        res_num = 0
+        f.write(r + "\n")
+        for co in loc_content[r].keys():
+            excel_list.append(co)
+            length = len(loc_content[r][co])
+            if length == 0:
+                continue
+            res_num += length
+            f.write(co + '\t' + str(length) + '\t')
+            for x in loc_content[r][co]:
+                f.write(str(x) + '\t')
+            f.write('\n')
+        f.write(str(res_num))
+        f.write("\n")
+        f.write("\n")
+        f.write("\n")
