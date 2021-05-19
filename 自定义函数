@@ -1,0 +1,420 @@
+import os
+import re
+
+###################################################
+################# small functions #################
+###################################################
+
+def mkdir_new(dir_name):
+    """
+    建立文件夹，如果文件夹已存在，报告。
+    :param dir_name: 需要建立的文件夹名称
+    :return: none
+    """
+    try:
+        os.mkdir(dir_name)
+    except FileExistsError:
+        print('The directory ' + dir_name + ' already exists.')
+
+def get_rc_line(line):
+    """
+    根据输入的核苷酸序列得到其反向互补序列
+    :param line: 基因序列
+    :return: 反向互补序列
+    """
+    list_tmp = list()
+    for each in line:
+        if (each == "A") or (each == "a"):
+            each = "T"
+        elif (each == "T") or (each == "t"):
+            each = "A"
+        elif (each == "C") or (each == "c"):
+            each = "G"
+        elif (each == "G") or (each == "g"):
+            each = "C"
+
+        list_tmp.insert(0,each)
+    rc_line = "".join(list_tmp)
+    return rc_line
+
+def Loc_Hap_Num(Loc_file):
+    '''
+    not
+    提取单个基因的单倍型信息并计数(Hap-seq-number)
+    :param Loc_file:原始的文件
+    :return:
+    '''
+
+    sequences = dict()
+
+    with open(Loc_file) as f_obj:
+        with open("LOC_Hap.csv", 'w') as f_obj2:
+            lines = f_obj.readlines()
+            information = lines[0:7]
+            f_obj2.writelines(information)
+            hap_seq = lines[7:]
+            for each in hap_seq:
+                if "N" in each:
+                    continue
+                each = each.rstrip()
+                each = each.split(",")
+                sequence = each[1:]
+                sequence = ",".join(sequence)
+                if sequence in sequences:
+                    sequences[sequence] += 1
+                elif sequence not in sequences:
+                    sequences[sequence] = 1
+            i = 1
+            for sequence, number in sequences.items():
+                line = "Hap" + str(i) + "," + sequence + "," + str(number) + "\n"
+                i += 1
+                f_obj2.write(line)
+
+###################################################
+################## 提取gxf文件信息 ##################
+###################################################
+def gff_gene_posi(gxf_file):
+    '''
+    基于gff文件提取各个基因的位置信息(染色体，起始位点，终止位点)
+    '''
+    if os.path.exists("LOC_position.txt"):
+        print("LOC_position.txt already exists.")
+    else:
+        gff_pattern = "(.*?)\t(.*?)\tgene\t(.*?)\t(.*?)\t(.*?)\t(.*?)\t(.*?)\tID=(.*?);"
+        with open(gxf_file) as f_obj:
+            with open("LOC_position.txt", 'w') as f_obj2:
+                for each_line in f_obj:
+                    a = re.search(gff_pattern, each_line)
+                    if a:
+                        a = a.groups()
+                        line = "%s\t%s\t%s\t%s\t%s\n" % (a[7], a[0], a[2], a[3], a[5])
+                        f_obj2.write(line)
+
+def gff_CDS_posi(gxf_file):
+    if os.path.exists("CDS_position.txt"):
+        print("CDS_position.txt already exists.")
+    else:
+        pattern = "(Chr.*?)\tMSU_osa1r7\tCDS\t(.*?)\t(.*?)\t(.*?)ID=(.*?)[:;]"
+        # 获取基因起始位点信息，用于计算CDS序列相对基因的位置
+        with open("LOC_position.txt") as f_obj:
+            loc_start = dict()
+            for each_line in f_obj:
+                line = each_line.rstrip().split("\t")
+                loc_start[line[0]] = line[2]
+
+        with open(gxf_file) as f_obj:
+            with open("CDS_position.txt", 'w') as f_obj2:
+    #            f_obj2.write("LOC\tchr\tsta_chr\tend_chr\tsta_gene\tend_gene\n")
+                for each_line in f_obj:
+                    if re.search(pattern, each_line):
+                        a = re.search(pattern, each_line)
+                        a = a.groups()
+                        if "ChrUn" in a[4] or "ChrSy" in a[4]:
+    #                        loc = a[4]
+                            line = "%s\t%s\t%s\t%s\tNA\tNA\n" % (a[4], a[0], a[1], a[2])
+                        else:
+                            loc = a[4].split(".")[0]
+                            sta_chr = loc_start[loc]
+                            sta_gene = int(a[1]) - int(sta_chr) + 1
+                            end_gene = int(a[2]) - int(sta_chr) + 1
+                            line = "%s\t%s\t%s\t%s\t%d\t%d\n" % (a[4], a[0], a[1], a[2], sta_gene, end_gene)
+                        f_obj2.write(line)
+
+
+
+###################################################
+################## 提取SNP文件信息 ##################
+###################################################
+def SNP_L_Sposi(L_Spfile="",output="LOC_SNPposi.txt"):
+    '''
+    提取LOC号与SNP位置的对应关系并存储为单独的文件
+    '''
+    if os.path.exists("LOC_SNPposi.txt"):
+        print("LOC_SNPposi.txt already exists.")
+    else:
+        with open(L_Spfile) as f_obj:
+            LOC_SNPposi = dict()
+            none_list = list()
+            f_obj.readlines(1)
+            for each_line in f_obj:
+                line = each_line.rstrip().split(",")
+                if (len(line) != 4) or ("N/A" in each_line) or (line[3] == ""):
+                    none_list.append(each_line)
+                    continue
+                if line[0] != "":
+                    LOC = line[0]
+                    LOC_SNPposi[LOC] = [line[3]]
+                else:
+                    LOC_SNPposi[LOC].append(line[3])
+
+        with open(output, 'w') as f_obj:
+            for LOC, Posi in LOC_SNPposi.items():
+                Posi.sort()
+                f_obj.write(LOC.strip('"').split(".")[0] + "\t" + ",".join(Posi).strip(",") + "\n")
+        #    for each in none_list:
+        #        f_obj.write(each.strip('"') + "\n")
+
+
+def SNP_L_Sseq(L_Ssfile="",output="LOC_SNPseq.txt"):
+    '''
+    提取LOC号与SNP序列的对应关系并存储为单独的文件
+    '''
+    if os.path.exists("LOC_SNPseq.txt"):
+        print("LOC_SNPseq.txt already exists.")
+    else:
+        with open(L_Ssfile) as f_obj:
+            LOC_SNPseq = dict()
+            none_list = list()
+            f_obj.readlines(1)
+            for each_line in f_obj:
+                line = each_line.rstrip().split(",")
+                if len(line) != 3:
+                    none_list.append(each_line)
+                    continue
+                if line[2] == "":
+                    continue
+                if line[0] != "":
+                    i = 1
+                    LOC = line[0].split(".")[0]
+                    if "N" in line[2]:
+                        i = 0
+                        continue
+                    Hap = "Hap" + str(i) + "-" + line[2]
+                    LOC_SNPseq[LOC] = [Hap]
+                else:
+                    if "N" in line[2]:
+                        continue
+                    i += 1
+                    Hap = "Hap" + str(i) + "-" + line[2]
+                    if i == 1:
+                        LOC_SNPseq[LOC] = [Hap]
+                    else:
+                        LOC_SNPseq[LOC].append(Hap)
+
+        with open(output, 'w') as f_obj:
+            for LOC,SNPseq in LOC_SNPseq.items():
+                f_obj.write(LOC.strip('"').split(".")[0] + "\t" + ",".join(SNPseq).strip(",") + "\n")
+
+###################################################
+################## 提取EXT文件信息 ##################
+###################################################
+def ext_CDS_posi2gene(CDS_posi2chr_file):
+    if os.path.exists("CDS_posi2gene.txt"):
+        print("CDS_posi2gene.txt already exists.")
+    else:
+        with open(CDS_posi2chr_file) as f_obj:
+            with open("CDS_posi2gene.txt", 'w') as f_obj2:
+                latter_transcript = "LOC"
+                CDS_posi = "posi"
+                for each_line in f_obj:
+                    line = each_line.rstrip().split("\t")
+                    transcript = line[0]
+                    gene_s = str(line[4])
+                    gene_e = str(line[5])
+                    if transcript == latter_transcript:
+                        CDS_posi = CDS_posi + ";" + gene_s + "-" + gene_e
+                        latter_transcript = transcript
+                    elif transcript != latter_transcript:
+                        line = latter_transcript + "\t" + CDS_posi + '\n'
+                        f_obj2.write(line)
+                        CDS_posi = gene_s + "-" + gene_e
+                        latter_transcript = transcript
+
+def ext_SNPposi2gene_seq(LOC_posi2chr_f, LOC_SNPseq_f, LOC_SNPposi2chr_f):
+    if os.path.exists("SNP_posi2gene_seq.txt"):
+        print("SNP_posi2gene_seq.txt already exists.")
+    else:
+        # 依据LOC号提取序列位置信息(起始位点)和正负链信息
+        with open(LOC_posi2chr_f) as f_obj:
+            LOC_start = dict()
+            LOC_pn = dict()
+            for each in f_obj:
+                each = each.rstrip().split("\t")
+                LOC = each[0]
+                start = each[2]
+                # pn: positive or negative
+                pn = each[4]
+                LOC_start[LOC] = start
+                LOC_pn[LOC] = pn
+
+        with open(LOC_SNPseq_f) as f_obj:
+            LOC_SNPseq = dict()
+            for each_line in f_obj:
+                each_line = each_line.rstrip().split("\t")
+                LOC = each_line[0]
+                Hap = each_line[1]
+                LOC_SNPseq[LOC] = Hap
+
+        ## 各个LOC的SNP的位点
+        with open(LOC_SNPposi2chr_f) as f_obj:
+            LOC_SNPposi = dict()
+            for each_line in f_obj:
+                each_line = each_line.rstrip().split("\t")
+                LOC = each_line[0]
+                posi = each_line[1]
+                LOC_SNPposi[LOC] = posi
+
+        with open("SNP_posi2gene_seq.txt", "w") as f_obj:
+            for LOC,Posi in LOC_start.items():
+                if (LOC in LOC_SNPposi) and (LOC in LOC_SNPseq):
+                    SNP_posi2chrs = LOC_SNPposi[LOC].split(",")
+                    SNP_posi2genes = []
+                    for posi in SNP_posi2chrs:
+                        posi2gene =  int(posi) - int(LOC_start[LOC]) + 1
+                        SNP_posi2genes.append(str(posi2gene))
+                    line = LOC +"\t" + LOC_pn[LOC] + "\t" + ",".join(SNP_posi2genes) + "\t" + LOC_SNPseq[LOC] + "\n"
+                    f_obj.write(line)
+
+
+def get_CDS(sequence, CDS_posi2gene):
+    cds_sequence = ""
+    for each_segment in CDS_posi2gene:
+        each_segment = each_segment.split("-")
+        start = int(each_segment[0]) - 1
+        end = int(each_segment[1])
+        seq_segment = sequence[start:end]
+        cds_sequence = cds_sequence + seq_segment
+    return cds_sequence
+
+def get_Hap_sequence(Hap_SNPs, SNP_posi2gene, line, pn = "+"):
+    for Hap, SNPs in Hap_SNPs.items():
+        i = 0
+        Hap_sequence = line
+        if len(SNP_posi2gene) != len(SNPs):
+            pass
+            break
+        for position in SNP_posi2gene:
+            position = int(position)
+            SNP = SNPs[i]
+            Hap_sequence = Hap_sequence[:position-1] + SNP + Hap_sequence[position:]
+            i += 1
+        Hap_file = Hap + ".fa"
+        with open(Hap_file, "w") as f_obj2:
+            f_obj2.write(">" + Hap + "\n")
+            if pn == "+":
+                f_obj2.write(Hap_sequence)
+            if pn == "-":
+                f_obj2.write(get_rc_line(Hap_sequence))
+
+
+
+def mkhapdir(f_obj, LOC, LOC_pn, LOC_SNPposi2gene, LOC_SNPseq,hapdir):
+    os.chdir(hapdir)
+    if (LOC in LOC_pn):
+        line = ""
+        while True:
+            change = f_obj.readlines(1)[0].rstrip()
+            if ">" in change:
+                LOC_next = change.split(" ")[0].lstrip(">")
+                break
+            else:
+                line = line + change
+
+        path2loc = hapdir + "\\" +LOC
+
+        try:
+            os.mkdir(path2loc)
+        except FileExistsError:
+            print(LOC)
+
+        os.chdir(path2loc)
+        with open(LOC + ".fa", "w") as f_obj2:
+            f_obj2.write(">" + LOC + "\n")
+            f_obj2.write(line)
+
+        Hap_SNPs = dict()
+        Hap_seq = LOC_SNPseq[LOC].split(",")
+        for each in Hap_seq:
+            Hap_SNPs[each.split("-")[0]] = each.split("-")[1]
+
+        SNPposi2gene = LOC_SNPposi2gene[LOC].split(",")
+
+        # 对基因在正负链的情况进行判断
+        if LOC_pn[LOC] == "+":
+            get_Hap_sequence(Hap_SNPs, SNPposi2gene, line, pn="+")
+        elif LOC_pn[LOC] == "-":
+            #rc_line: reverse complimentary line
+            rc_line = get_rc_line(line)
+            get_Hap_sequence(Hap_SNPs, SNPposi2gene, rc_line, pn="-")
+        return LOC_next
+
+###################################################
+#################### Last Step ####################
+###################################################
+
+def last_get_Hapseq(SNP_last_f, seq_file, hapdir):
+    with open(SNP_last_f) as f_obj:
+        LOC_pn = dict()
+        LOC_SNPposi2gene = dict()
+        LOC_SNPseq = dict()
+        for each_line in f_obj:
+            each_line = each_line.rstrip().split("\t")
+            LOC = each_line[0]
+            LOC_pn[LOC] = each_line[1]
+            LOC_SNPposi2gene[LOC] = each_line[2]
+            LOC_SNPseq[LOC] = each_line[3]
+
+    with open(seq_file) as f_obj:
+        LOC_next = ""
+        for each in f_obj:
+            if ">" in each:
+                LOC = each.split(" ")[0].lstrip(">")
+                LOC_next = mkhapdir(f_obj, LOC, LOC_pn, LOC_SNPposi2gene, LOC_SNPseq, hapdir)
+            elif LOC_next != "":
+                LOC = LOC_next
+                LOC_next = mkhapdir(f_obj, LOC, LOC_pn, LOC_SNPposi2gene, LOC_SNPseq, hapdir)
+
+def last_get_HapCDS(SNP_last_f, CDS_last_f, hapdir):
+    with open(SNP_last_f) as f_obj:
+        LOCs = []
+        LOC_pn = {}
+        for each in f_obj:
+            LOCs.append(each.split("\t")[0])
+            LOC_pn[each.split("\t")[0]] = each.split("\t")[1]
+
+    with open(CDS_last_f) as f_obj:
+        f_obj.readline(1)
+        LOC_transcripts = {}
+        transcripts_posi = {}
+        for each_line in f_obj:
+            line = each_line.rstrip().split("\t")
+            LOC = line[0].split(".")[0]
+            transcript = line[0]
+            posi = line[1]
+            if (LOC in LOCs) and (LOC not in LOC_transcripts):
+                LOC_transcripts[LOC] = transcript
+            elif (LOC in LOCs) and (LOC in LOC_transcripts):
+                LOC_transcripts[LOC] = LOC_transcripts[LOC] + "," + transcript
+            transcripts_posi[transcript] = posi
+
+    # 根据vg号进入不同的文件夹撰写文件内容
+    for LOC in LOCs:
+        Loc_dir = hapdir + "\\" + LOC
+        os.chdir(Loc_dir)
+        i = 1
+        file_exist = True
+        while file_exist:
+            prehap_file = "Hap" + str(i) + ".fa"
+            try:
+                with open(prehap_file) as f_obj:
+
+                    sequence = f_obj.readlines()[1].rstrip()
+                    transcripts = LOC_transcripts[LOC].split(",")
+                    for transcript in transcripts:
+                        filename = "Hap" + str(i) + "_" + transcript + ".fa"
+                        with open(filename, 'w') as f_obj3:
+                            f_obj3.write(">" + "Hap" + str(i) + "_" + transcript + "\n")
+                            posi = transcripts_posi[transcript]
+                            posi = posi.split(";")
+
+                            if LOC_pn[LOC] == "+":
+                                cds_sequence = get_CDS(sequence, CDS_posi2gene=posi)
+                                f_obj3.write(cds_sequence)
+                            elif LOC_pn[LOC] == "-":
+                                sequence = get_rc_line(sequence)
+                                posi.reverse()
+                                cds_sequence = get_CDS(sequence, CDS_posi2gene=posi)
+                                f_obj3.write(get_rc_line(cds_sequence))
+                i += 1
+            except FileNotFoundError:
+                file_exist = False
