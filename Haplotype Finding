@@ -1,0 +1,54 @@
+import os
+# 更改工作目录至"C:\\Users\\hr\\Desktop"
+os.chdir(r"C:\Users\hr\Desktop")
+
+# 定义 .csv 文件名称
+file_name = '1.csv'
+
+with open(file_name) as file1:
+
+    # 移动指针至第一个品种前
+    file1.readlines(1)
+    file1.readlines(1)
+    file1.readlines(1)
+    file1.readlines(1)
+    file1.readlines(1)
+    file1.readlines(1)
+    file1.readlines(1)
+
+    # 对每一行进行处理得到这一品种的SNP序列，并添加到列表ALL_Sequence中
+    # 如果需要对序列进行筛选，可添加if continue语句：
+    ALL_sequence = {}
+    for each_line in file1:
+        SNP_sequence = each_line.split(',')
+        SNP_sequence[-1] = SNP_sequence[-1].split('\n')[0]  # 去除'\n'
+        # 去除指明品种的列的值
+        SNP_sequence.pop(0)
+
+
+        if 'N' in SNP_sequence:
+            continue
+        elif 'DEL' in SNP_sequence:
+            continue
+        elif '-9' in SNP_sequence:
+            continue
+
+        # 拼接SNP序列并存储该序列已出现次数于ALL_sequence中
+        SNP_sequence = ''.join(SNP_sequence)
+        if SNP_sequence in ALL_sequence:
+            ALL_sequence[SNP_sequence] += 1
+        elif SNP_sequence not in ALL_sequence:
+            ALL_sequence[SNP_sequence] = 1
+
+        # 统计一下所有序列出现的总次数
+        Sum_of_sequence = 0
+        for each in ALL_sequence:
+            Sum_of_sequence += ALL_sequence[each]
+
+    # 输出ALL_sequence 中的序列组合及序列组合出现的次数
+    # 将相关内容存储于新文件中file_name.txt中
+    new_file = file_name + '.txt'
+    with open(new_file, 'w') as file2:
+        file2.write('SNP_sequence\t出现次数\t百分比\n')
+        for each in ALL_sequence:
+            file2.write('%s\t%d\t%f\n' % (each, ALL_sequence[each], ALL_sequence[each]/Sum_of_sequence))
